@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart Appointment Reminder</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      margin-top: 40px;
+      background: #f4f4f4;
+    }
+
+    .box {
+      background: white;
+      padding: 20px;
+      width: 340px;
+      margin: auto;
+      border-radius: 10px;
+      box-shadow: 0 0 10px gray;
+    }
+
+    input {
+      width: 90%;
+      padding: 8px;
+      margin: 8px 0;
+    }
+
+    button {
+      padding: 10px;
+      width: 100%;
+      background: green;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+
+    button:hover {
+      background: darkgreen;
+    }
+
+    .list {
+      margin-top: 20px;
+      width: 340px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .item {
+      background: white;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 8px;
+      box-shadow: 0 0 5px #ccc;
+      text-align: left;
+      position: relative;
+    }
+
+    .done {
+      background: #d4ffd4;
+      border-left: 5px solid green;
+    }
+
+    .pending {
+      border-left: 5px solid orange;
+    }
+
+    .status {
+      font-size: 12px;
+      padding: 3px 6px;
+      border-radius: 5px;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+
+    .btn-small {
+      margin-top: 8px;
+      padding: 5px;
+      font-size: 12px;
+      width: 48%;
+      display: inline-block;
+    }
+
+    .btn-done { background: blue; }
+    .btn-res { background: orange; }
+  </style>
+</head>
+
+<body>
+
+<div class="box">
+  <h2>📅 Reminder App</h2>
+
+  <input type="datetime-local" id="date"><br>
+  <input type="text" id="message" placeholder="Message"><br>
+  <input type="email" id="email" placeholder="Email"><br>
+  <input type="text" id="phone" placeholder="Phone (+1...)"><br>
+
+  <button onclick="setReminder()">Set Reminder</button>
+
+  <p id="status"></p>
+</div>
+
+<h3>📌 Your Appointments</h3>
+<div class="list" id="reminderList"></div>
+
+<script>
+
+// ======================
+// 🔥 API BASE (ONLY ONE PLACE TO CHANGE)
+// ======================
+const API = "https://your-backend-url.com";
+
+// ======================
+// LOAD REMINDERS
+// ======================
+async function loadReminders() {
+  try {
+    const res = await fetch(`${API}/reminders`);
+    const data = await res.json();
+
+    const list = document.getElementById("reminderList");
+    list.innerHTML = "";
+
+    data.forEach((r) => {
+      const date = new Date(r.date).toLocaleString();
+
+      list.innerHTML += `
+        <div class="item ${r.status === "done" ? "done" : "pending"}">
+          <div class="status">${r.status}</div>
+
+          📅 <b>Date:</b> ${date} <br/>
+          📝 <b>Message:</b> ${r.message} <br/>
+          📧 <b>Email:</b> ${r.email} <br/>
+          📱 <b>Phone:</b> ${r.phone || "N/A"} <br/>
+
+          <button class="btn-small btn-done" onclick="markDone(${r.id})">
+            ✔ Done
+          </button>
+
+          <button class="btn-small btn-res" onclick="reschedule(${r.id})">
+            🔁 Reschedule
+          </button>
+        </div>
+      `;
+    });
+
+  } catch (err) {
+    console.log("Error loading reminders");
+  }
+}
+
+// ======================
+// SET REMINDER
+// ======================
+async function setReminder() {
+  const date = document.getElementById("date").value;
+  const message = document.getElementById("message").value;
+  const email = document.getElementById("email").value;
+  const phone = document.getElementById("phone").value;
+
+  if (!date || !message || !email) {
+    alert("❗ Please fill all required fields");
+    return;
+  }
+
+  try {
+    await fetch(`${API}/reminder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, message, email, phone })
+    });
+
+    document.getElementById("status").innerText =
+      "✅ Reminder Set Successfully!";
+
+    loadReminders();
+
+  } catch (err) {
+    alert("❌ Server not running!");
+  }
+}
+
+// ======================
+// MARK DONE
+// ======================
+async function markDone(id) {
+  await fetch(`${API}/reminder/done`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+
+  loadReminders();
+}
+
+// ======================
+// RESCHEDULE
+// ======================
+async function reschedule(id) {
+  const newDate = prompt("Enter new date (YYYY-MM-DD HH:MM)");
+  if (!newDate) return;
+
+  await fetch(`${API}/reminder/reschedule`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, date: newDate })
+  });
+
+  loadReminders();
+}
+
+// ======================
+// AUTO REFRESH
+// ======================
+setInterval(loadReminders, 10000);
+
+// initial load
+window.onload = loadReminders;
+
+</script>
+
+</body>
+</html>

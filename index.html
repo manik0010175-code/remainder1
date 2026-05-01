@@ -1,224 +1,227 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Smart Appointment Reminder</title>
+  <title>Appointment Reminder App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style>
     body {
       font-family: Arial;
-      text-align: center;
-      margin-top: 40px;
       background: #f4f4f4;
+      padding: 10px;
     }
 
     .box {
       background: white;
-      padding: 20px;
-      width: 340px;
-      margin: auto;
+      padding: 12px;
+      margin-bottom: 10px;
       border-radius: 10px;
-      box-shadow: 0 0 10px gray;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
 
-    input {
-      width: 90%;
-      padding: 8px;
-      margin: 8px 0;
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      margin-bottom: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
     }
 
     button {
-      padding: 10px;
-      width: 100%;
-      background: green;
+      background: #007bff;
       color: white;
       border: none;
       cursor: pointer;
-      margin-top: 5px;
     }
 
     button:hover {
-      background: darkgreen;
+      background: #0056b3;
     }
 
-    .list {
-      margin-top: 20px;
-      width: 340px;
-      margin-left: auto;
-      margin-right: auto;
+    .btn-row {
+      display: flex;
+      gap: 5px;
     }
 
-    .item {
+    .btn-row button {
+      flex: 1;
+    }
+
+    .pending { color: orange; }
+    .missed { color: red; }
+    .done { color: green; }
+
+    .small {
+      font-size: 12px;
+      color: gray;
+    }
+
+    /* MODAL */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+    }
+
+    .modal-content {
       background: white;
-      padding: 10px;
-      margin: 8px 0;
-      border-radius: 8px;
-      box-shadow: 0 0 5px #ccc;
-      text-align: left;
-      position: relative;
+      padding: 15px;
+      margin: 20% auto;
+      width: 90%;
+      border-radius: 10px;
     }
-
-    .done {
-      background: #d4ffd4;
-      border-left: 5px solid green;
-    }
-
-    .pending {
-      border-left: 5px solid orange;
-    }
-
-    .status {
-      font-size: 12px;
-      padding: 3px 6px;
-      border-radius: 5px;
-      position: absolute;
-      top: 10px;
-      right: 10px;
-    }
-
-    .btn-small {
-      margin-top: 8px;
-      padding: 5px;
-      font-size: 12px;
-      width: 48%;
-      display: inline-block;
-    }
-
-    .btn-done { background: blue; }
-    .btn-res { background: orange; }
   </style>
 </head>
 
 <body>
 
+<h2>📅 Appointment Reminder App</h2>
+
 <div class="box">
-  <h2>📅 Reminder App</h2>
-
-  <input type="datetime-local" id="date"><br>
-  <input type="text" id="message" placeholder="Message"><br>
-  <input type="email" id="email" placeholder="Email"><br>
-  <input type="text" id="phone" placeholder="Phone (+1...)"><br>
-
-  <button onclick="setReminder()">Set Reminder</button>
-
-  <p id="status"></p>
+  <input id="title" placeholder="Title">
+  <input id="datetime" type="datetime-local">
+  <input id="phone" placeholder="Mobile Number (optional)">
+  <input id="email" placeholder="Email (optional)">
+  <button onclick="addAppointment()">Add Appointment</button>
 </div>
 
-<h3>📌 Your Appointments</h3>
-<div class="list" id="reminderList"></div>
+<div id="list"></div>
+
+<!-- RESCHEDULE MODAL -->
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <h3>Reschedule Appointment</h3>
+    <input type="datetime-local" id="newDateTime">
+    <button onclick="saveReschedule()">Save</button>
+    <button onclick="closeModal()" style="background:red;">Cancel</button>
+  </div>
+</div>
 
 <script>
 
-// ======================
-// 🔥 API BASE (ONLY ONE PLACE TO CHANGE)
-// ======================
-const API = "https://your-backend-url.com";
+let appointments = JSON.parse(localStorage.getItem("apps")) || [];
+let editId = null;
 
-// ======================
-// LOAD REMINDERS
-// ======================
-async function loadReminders() {
-  try {
-    const res = await fetch(`${API}/reminders`);
-    const data = await res.json();
+function save() {
+  localStorage.setItem("apps", JSON.stringify(appointments));
+}
 
-    const list = document.getElementById("reminderList");
-    list.innerHTML = "";
+function getStatus(time, status) {
+  if (status === "done") return "done";
 
-    data.forEach((r) => {
-      const date = new Date(r.date).toLocaleString();
+  let now = new Date();
+  let apptTime = new Date(time);
 
-      list.innerHTML += `
-        <div class="item ${r.status === "done" ? "done" : "pending"}">
-          <div class="status">${r.status}</div>
+  if (apptTime < now) return "missed";
+  return "pending";
+}
 
-          📅 <b>Date:</b> ${date} <br/>
-          📝 <b>Message:</b> ${r.message} <br/>
-          📧 <b>Email:</b> ${r.email} <br/>
-          📱 <b>Phone:</b> ${r.phone || "N/A"} <br/>
+function addAppointment() {
+  let title = document.getElementById("title").value;
+  let datetime = document.getElementById("datetime").value;
+  let phone = document.getElementById("phone").value;
+  let email = document.getElementById("email").value;
 
-          <button class="btn-small btn-done" onclick="markDone(${r.id})">
-            ✔ Done
-          </button>
+  if (!title || !datetime) return alert("Title & Date required");
 
-          <button class="btn-small btn-res" onclick="reschedule(${r.id})">
-            🔁 Reschedule
-          </button>
+  appointments.push({
+    id: Date.now(),
+    title,
+    datetime,
+    phone,
+    email,
+    status: "pending",
+    rescheduledFrom: null
+  });
+
+  save();
+  render();
+}
+
+function deleteApp(id) {
+  appointments = appointments.filter(a => a.id !== id);
+  save();
+  render();
+}
+
+function markDone(id) {
+  appointments = appointments.map(a => {
+    if (a.id === id) a.status = "done";
+    return a;
+  });
+
+  save();
+  render();
+}
+
+/* OPEN MODAL */
+function reschedule(id) {
+  editId = id;
+  document.getElementById("modal").style.display = "block";
+}
+
+/* SAVE NEW DATE FROM CALENDAR */
+function saveReschedule() {
+  let newDate = document.getElementById("newDateTime").value;
+
+  if (!newDate) return alert("Select date & time");
+
+  appointments = appointments.map(a => {
+    if (a.id === editId) {
+      a.rescheduledFrom = a.datetime;
+      a.datetime = newDate;
+      a.status = "pending";
+    }
+    return a;
+  });
+
+  save();
+  closeModal();
+  render();
+}
+
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
+}
+
+/* RENDER */
+function render() {
+  let list = document.getElementById("list");
+  list.innerHTML = "";
+
+  appointments.forEach(a => {
+    let status = getStatus(a.datetime, a.status);
+
+    list.innerHTML += `
+      <div class="box">
+        <h3>${a.title}</h3>
+
+        <p>📅 ${a.datetime}</p>
+
+        ${a.rescheduledFrom ? 
+          `<p class="small">↩ Previous: ${a.rescheduledFrom}</p>` : ""}
+
+        ${a.phone ? `<p>📱 ${a.phone}</p>` : ""}
+        ${a.email ? `<p>📧 ${a.email}</p>` : ""}
+
+        <p class="${status}">Status: ${status}</p>
+
+        <div class="btn-row">
+          <button onclick="markDone(${a.id})">Done</button>
+          <button onclick="reschedule(${a.id})">Reschedule</button>
+          <button onclick="deleteApp(${a.id})">Delete</button>
         </div>
-      `;
-    });
-
-  } catch (err) {
-    console.log("Error loading reminders");
-  }
-}
-
-// ======================
-// SET REMINDER
-// ======================
-async function setReminder() {
-  const date = document.getElementById("date").value;
-  const message = document.getElementById("message").value;
-  const email = document.getElementById("email").value;
-  const phone = document.getElementById("phone").value;
-
-  if (!date || !message || !email) {
-    alert("❗ Please fill all required fields");
-    return;
-  }
-
-  try {
-    await fetch(`${API}/reminder`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, message, email, phone })
-    });
-
-    document.getElementById("status").innerText =
-      "✅ Reminder Set Successfully!";
-
-    loadReminders();
-
-  } catch (err) {
-    alert("❌ Server not running!");
-  }
-}
-
-// ======================
-// MARK DONE
-// ======================
-async function markDone(id) {
-  await fetch(`${API}/reminder/done`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id })
+      </div>
+    `;
   });
-
-  loadReminders();
 }
 
-// ======================
-// RESCHEDULE
-// ======================
-async function reschedule(id) {
-  const newDate = prompt("Enter new date (YYYY-MM-DD HH:MM)");
-  if (!newDate) return;
-
-  await fetch(`${API}/reminder/reschedule`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, date: newDate })
-  });
-
-  loadReminders();
-}
-
-// ======================
-// AUTO REFRESH
-// ======================
-setInterval(loadReminders, 10000);
-
-// initial load
-window.onload = loadReminders;
+render();
 
 </script>
 
